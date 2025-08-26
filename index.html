@@ -1,1 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>JK Algo</title>
 
+<!-- Tailwind-like minimal vars -->
+<style>
+:root{
+  --bg:#0f1722; --panel:#121c27; --card:#0f1a26; --muted:#9fb0c0; --text:#e8f0f7;
+  --accent:#2dd4bf; --blue:#60a5fa; --red:#ef5350; --green:#22c55e; --chip:#1e2a38;
+  --ring:#2a3a4d;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial}
+a{color:var(--accent);text-decoration:none}
+.container{max-width:980px;margin:0 auto;padding:14px}
+.row{display:flex;gap:10px;flex-wrap:wrap}
+.card{background:var(--panel);border:1px solid var(--ring);border-radius:16px;padding:14px}
+.mt{margin-top:12px}
+h1{font-size:26px;margin:0 0 8px}
+h2{font-size:18px;margin:0 0 8px}
+label{font-size:12px;color:var(--muted);display:block;margin:10px 0 6px}
+select, input, button{
+  width:100%;background:#0b1420;color:var(--text);border:1px solid var(--ring);
+  border-radius:12px;padding:12px;outline:none;
+}
+select, input{appearance:none}
+.btn{cursor:pointer}
+.btn.primary{background:#12324a;border-color:#1e4670}
+.btn.green{background:#0e2d25;border-color:#145e54}
+.btn.red{background:#3a1418;border-color:#7a1c21}
+.badge{background:#14212e;border:1px solid var(--ring);padding:8px 12px;border-radius:12px;display:inline-block}
+.note{color:var(--muted);font-size:12px}
+
+.nav{position:sticky;top:0;z-index:5;background:linear-gradient(180deg,#0f1722,#0f1722ef 70%, transparent)}
+.nav-inner{display:flex;align-items:center;gap:12px;padding:10px 14px}
+.brand{display:flex;align-items:center;gap:8px;font-weight:700}
+.brand .dot{width:10px;height:10px;background:var(--accent);border-radius:3px;transform:rotate(45deg)}
+.tabs{display:flex;gap:8px;margin-left:auto}
+.tab{padding:10px 14px;border:1px solid var(--ring);border-radius:14px;background:#0b1420;color:#c9d7e5}
+.tab.active{background:#132033;color:#fff;border-color:#37506a;box-shadow:0 0 0 2px #0b2238 inset}
+.hide{display:none}
+
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media (max-width:720px){ .grid2{grid-template-columns:1fr} }
+/* checkboxes UI */
+.ck{display:flex;align-items:center;gap:10px;margin:6px 0 0}
+.ck input{width:auto;accent-color:#2aa7ff}
+.chips{display:flex;gap:8px;flex-wrap:wrap}
+.chip{background:var(--chip);border:1px solid var(--ring);padding:8px 12px;border-radius:999px;font-size:13px}
+.kpi{position:fixed;right:10px;top:62px;background:#0c1521;border:1px solid var(--ring);padding:10px 12px;border-radius:14px;z-index:4}
+.kpi small{color:var(--muted)}
+/* Pro chart panes */
+#prochart,#rsiPane,#macdPane{background:#0b1420;border:1px solid var(--ring);border-radius:12px}
+</style>
+
+<!-- Lightweight Charts (Pro Chart) -->
+<script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+</head>
+<body>
+
+<!-- NAV -->
+<div class="nav">
+  <div class="nav-inner container">
+    <div class="brand"><span class="dot"></span> JK Algo</div>
+    <div class="tabs">
+      <button class="tab active" data-page="home">Home</button>
+      <button class="tab" data-page="market">Market</button>
+      <button class="tab" data-page="positions">Positions</button>
+    </div>
+  </div>
+</div>
+
+<div class="container">
+
+  <!-- KPI bubble -->
+  <div class="kpi" id="kpi">
+    <div><b>Capital: $<span id="cap">1000.00</span></b></div>
+    <small>PnL: $<span id="pnl">0.00</span> • Margin: $<span id="mgn">0.00</span></small>
+  </div>
+
+  <!-- HOME -->
+  <section id="page-home">
+    <div class="card">
+      <h1>JK ALGO Setup</h1>
+
+      <div class="grid2">
+        <div>
+          <label>Pair</label>
+          <select id="homePair">
+            <option>BTC/USDT</option>
+            <option>ETH/USDT</option>
+            <option>SOL/USDT</option>
+            <option>XRP/USDT</option>
+            <option>GOLD (XAU/USD)</option>
+            <option>USOIL (WTI/USD)</option>
+          </select>
+        </div>
+        <div>
+          <label>Timeframe</label>
+          <select id="homeTf">
+            <option value="5">5m</option>
+            <option value="1">1m</option>
+            <option value="15">15m</option>
+            <option value="60">1h</option>
+            <option value="240">4h</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="row" style="margin-top:10px">
+        <button class="btn primary" id="applyHome">Apply / Start</button>
+        <button class="btn red" id="stopHome">Stop</button>
+      </div>
+
+      <p class="note">Frontend demo only – signals/chart only. Real trading later plug-in.</p>
+    </div>
+
+    <div class="card mt">
+      <h2>Strategies & Indicators</h2>
+
+      <label>Strategy (A)</label>
+      <select id="stratA">
+        <option value="ema">EMA Cross (12/26)</option>
+        <option value="bb">Bollinger Mean Revert</option>
+        <option value="rsi">RSI (14) OB/OS</option>
+      </select>
+
+      <label style="margin-top:8px">Strategy (B)</label>
+      <select id="stratB">
+        <option value="off">— None —</option>
+        <option value="ema">EMA Cross (12/26)</option>
+        <option value="bb">Bollinger Mean Revert</option>
+        <option value="rsi">RSI (14) OB/OS</option>
+      </select>
+
+      <div class="row" style="margin-top:10px">
+        <div class="ck"><input type="checkbox" id="indE" /><span>EMA</span></div>
+        <div class="ck"><input type="checkbox" id="indB" /><span>Bollinger</span></div>
+        <div class="ck"><input type="checkbox" id="indR" /><span>RSI</span></div>
+        <div class="ck"><input type="checkbox" id="indP" /><span>Pivots</span></div>
+        <div class="ck"><input type="checkbox" id="indM" /><span>MACD</span></div>
+      </div>
+
+      <div class="row" style="margin-top:10px">
+        <button class="btn primary" id="applyStrats">Apply to Chart</button>
+        <button class="btn" id="resetStrats">Reset</button>
+      </div>
+      <p class="note">Selections localStorage में save — refresh/tab change पर भी same रहेंगे.</p>
+    </div>
+
+    <!-- Pro Chart panes -->
+    <div class="card mt">
+      <h2>Pro Chart (with Indicators)</h2>
+      <div id="prochart" style="height:420px"></div>
+      <div id="rsiPane"  style="height:160px;margin-top:8px"></div>
+      <div id="macdPane" style="height:160px;margin-top:8px"></div>
+      <p class="note">Crypto pairs only (Binance). GOLD/USOIL पर indicators अभी disabled message दिखेगा.</p>
+    </div>
+  </section>
+
+  <!-- MARKET (demo) -->
+  <section id="page-market" class="hide">
+    <div class="card">
+      <h1>Market</h1>
+      <p class="note">Yahan future me watchlist / quick chart open kar sakte ho. Abhi Home ka Pro Chart primary hai.</p>
+    </div>
+  </section>
+
+  <!-- POSITIONS (demo table) -->
+  <section id="page-positions" class="hide">
+    <div class="card">
+      <h1>Positions</h1>
+      <div class="chips">
+        <span class="chip">Open: 0</span>
+        <span class="chip">Pending: 0</span>
+        <span class="chip">Closed (today): 0</span>
+      </div>
+      <p class="note">Frontend demo — real fills/connectivity later plug-in.</p>
+    </div>
+  </section>
+
+</div>
+
+<script>
+// ======= basic tab routing =======
+const tabs = document.querySelectorAll('.tab');
+tabs.forEach(t=>{
+  t.onclick = () => {
+    tabs.forEach(x=>x.classList.remove('active'));
+    t.classList.add('active');
+    const page = t.dataset.page;
+    document.getElementById('page-home').classList.toggle('hide',page!=='home');
+    document.getElementById('page-market').classList.toggle('hide',page!=='market');
+    document.getElementById('page-positions').classList.toggle('hide',page!=='positions');
+  };
+});
+
+// ======= localStorage state =======
+const ls = {
+  get(k, def){ const v = localStorage.getItem(k); return (v===null?def:v); },
+  set(k,v){ localStorage.setItem(k,v); }
+};
+(function bootState(){
+  // capital widget (demo)
+  document.getElementById('cap').textContent = Number(ls.get('jk.cap','1000')).toFixed(2);
+  // pair/tf
+  document.getElementById('homePair').value = ls.get('jk.pair','BTC/USDT');
+  document.getElementById('homeTf').value = ls.get('jk.tf','5');
+  // strategies
+  document.getElementById('stratA').value = ls.get('jk.stratA','ema');
+  document.getElementById('stratB').value = ls.get('jk.stratB','off');
+  // indicators
+  document.getElementById('indE').checked = ls.get('jk.indEMA','1')==='1';
+  document.getElementById('indB').checked = ls.get('jk.indBB','1')==='1';
+  document.getElementById('indR').checked = ls.get('jk.indRSI','1')==='1';
+  document.getElementById('indP').checked = ls.get('jk.indPIV','1')==='1';
+  document.getElementById('indM').checked = ls.get('jk.indMACD','0')==='1';
+})();
+
+['homePair','homeTf','stratA','stratB'].forEach(id=>{
+  document.getElementById(id).addEventListener('change', e=> ls.set('jk.'+id.replace('home','').toLowerCase(), e.target.value));
+});
+[['indE','jk.indEMA'],['indB','jk.indBB'],['indR','jk.indRSI'],['indP','jk.indPIV'],['indM','jk.indMACD']].forEach(([id,k])=>{
+  document.getElementById(id).addEventListener('change', e=> ls.set(k, e.target.checked?'1':'0'));
+});
+
+// ======= PRO CHART implementation (Lightweight Charts) =======
+
+// map UI timeframes to Binance
+function toBinanceTF(tfVal){ const m={ '1':'1m','5':'5m','15':'15m','60':'1h','240':'4h' }; return m[String(tfVal)]||'5m'; }
+// UI label -> Binance symbol (crypto only)
+function toBinanceSymbol(label){ return label.includes('/') ? label.replace('/','').toUpperCase() : null; }
+
+// math helpers
+function sma(arr,len){ const out=Array(arr.length).fill(null); let sum=0; for(let i=0;i<arr.length;i++){sum+=arr[i]; if(i>=len) sum-=arr[i-len]; if(i>=len-1) out[i]=sum/len;} return out;}
+function ema(arr,len){ const out=Array(arr.length).fill(null); const k=2/(len+1); let p=null; for(let i=0;i<arr.length;i++){const v=arr[i]; p=(p===null)?v:(v*k + p*(1-k)); out[i]=p;} return out;}
+function std(arr,len){ const out=Array(arr.length).fill(null); let q=[]; for(let i=0;i<arr.length;i++){ q.push(arr[i]); if(q.length>len) q.shift(); if(q.length===len){ const mean=q.reduce((a,b)=>a+b,0)/len; const v=Math.sqrt(q.reduce((a,b)=>a+(b-mean)*(b-mean),0)/len); out[i]=v; } } return out;}
+function rsi(vals,len=14){ const out=Array(vals.length).fill(null); let g=0,l=0; for(let i=1;i<=len;i++){const ch=vals[i]-vals[i-1]; g+=Math.max(ch,0); l+=Math.max(-ch,0);} let aG=g/len,aL=l/len; out[len]=100-(100/(1+(aG/(aL||1e-9)))); for(let i=len+1;i<vals.length;i++){const ch=vals[i]-vals[i-1]; const G=Math.max(ch,0), L=Math.max(-ch,0); aG=(aG*(len-1)+G)/len; aL=(aL*(len-1)+L)/len; out[i]=100-(100/(1+(aG/(aL||1e-9)))); } return out;}
+function macd(vals,fast=12,slow=26,signal=9){ const eF=ema(vals,fast), eS=ema(vals,slow); const mac = vals.map((_,i)=> (eF[i]!=null&&eS[i]!=null)?(eF[i]-eS[i]):null); const sig=ema(mac.map(v=>v??0),signal).map((v,i)=> mac[i]==null?null:v); const hist=mac.map((v,i)=> (v!=null&&sig[i]!=null)?(v-sig[i]):null); return {macdLine:mac, sigLine:sig, hist}; }
+
+let proChart, proSeries={}, rsiChart, rsiSeries={}, macdChart, macdSeries={};
+function initProCharts(){
+  const common={ layout:{background:{type:'solid',color:'#0b1420'},textColor:'#aab6c3'}, grid:{vertLines:{color:'#1e2a38'},horzLines:{color:'#1e2a38'}}, crosshair:{mode:LightweightCharts.CrosshairMode.Normal}};
+  const pc=document.getElementById('prochart'), rc=document.getElementById('rsiPane'), mc=document.getElementById('macdPane');
+  pc.innerHTML=''; rc.innerHTML=''; mc.innerHTML='';
+  proChart = LightweightCharts.createChart(pc,{...common,rightPriceScale:{borderVisible:false}});
+  rsiChart = LightweightCharts.createChart(rc,{...common,rightPriceScale:{borderVisible:false}});
+  macdChart= LightweightCharts.createChart(mc,{...common,rightPriceScale:{borderVisible:false}});
+
+  proSeries.candles = proChart.addCandlestickSeries({upColor:'#26a69a',downColor:'#ef5350',borderVisible:false,wickUpColor:'#26a69a',wickDownColor:'#ef5350'});
+  proSeries.ema12   = proChart.addLineSeries({color:'#5ec8ff',lineWidth:2});
+  proSeries.ema26   = proChart.addLineSeries({color:'#ffd166',lineWidth:2});
+  proSeries.bbU     = proChart.addLineSeries({color:'#9a7cff',lineWidth:1,lineStyle:LightweightCharts.LineStyle.Dotted});
+  proSeries.bbL     = proChart.addLineSeries({color:'#9a7cff',lineWidth:1,lineStyle:LightweightCharts.LineStyle.Dotted});
+
+  rsiSeries.line = rsiChart.addLineSeries({color:'#66d9e8',lineWidth:2});
+  rsiSeries.h30  = rsiChart.addLineSeries({color:'#e56b6f',lineWidth:1});
+  rsiSeries.h70  = rsiChart.addLineSeries({color:'#a7f3d0',lineWidth:1});
+
+  macdSeries.hist = macdChart.addHistogramSeries({color:'#94a3b8'});
+  macdSeries.macd = macdChart.addLineSeries({color:'#60a5fa',lineWidth:2});
+  macdSeries.sig  = macdChart.addLineSeries({color:'#f59e0b',lineWidth:2});
+}
+
+async function fetchKlines(symbol, interval, limit=500){
+  const url=`https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`;
+  const res=await fetch(url); if(!res.ok) throw new Error('fetch fail'); return await res.json();
+}
+function toCandleData(kl){ return kl.map(k=>({ time:Math.floor(k[0]/1000), open:+k[1], high:+k[2], low:+k[3], close:+k[4] })); }
+function arrClose(kl){ return kl.map(k=>+k[4]); }
+
+async function proLoad(pairLabel, tfVal){
+  const sym = toBinanceSymbol(pairLabel);
+  const pc  = document.getElementById('prochart');
+  if(!sym){ pc.innerHTML='<div style="padding:18px;color:#9fb0c0">Non-crypto pair — indicators currently crypto (Binance) पर ही उपलब्ध.</div>'; document.getElementById('rsiPane').innerHTML=''; document.getElementById('macdPane').innerHTML=''; return; }
+
+  initProCharts();
+  try{
+    const kl = await fetchKlines(sym, toBinanceTF(tfVal), 500);
+    const candles = toCandleData(kl);
+    const closes  = arrClose(kl);
+    proSeries.candles.setData(candles);
+
+    // toggles
+    const showEMA  = ls.get('jk.indEMA','1')==='1';
+    const showBB   = ls.get('jk.indBB','1')==='1';
+    const showRSI  = ls.get('jk.indRSI','1')==='1';
+    const showPIV  = ls.get('jk.indPIV','1')==='1';
+    const showMACD = ls.get('jk.indMACD','0')==='1';
+
+    // EMA
+    const e12=ema(closes,12), e26=ema(closes,26);
+    proSeries.ema12.setData(closes.map((_,i)=> e12[i]==null?null:{time:candles[i].time,value:e12[i]}).filter(Boolean));
+    proSeries.ema26.setData(closes.map((_,i)=> e26[i]==null?null:{time:candles[i].time,value:e26[i]}).filter(Boolean));
+    proSeries.ema12.applyOptions({visible:showEMA}); proSeries.ema26.applyOptions({visible:showEMA});
+
+    // Bollinger 20/2
+    const basis=sma(closes,20), dev=std(closes,20);
+    const bbU=closes.map((_,i)=> (basis[i]!=null&&dev[i]!=null)? basis[i]+2*dev[i]:null);
+    const bbL=closes.map((_,i)=> (basis[i]!=null&&dev[i]!=null)? basis[i]-2*dev[i]:null);
+    proSeries.bbU.setData(bbU.map((v,i)=> v==null?null:{time:candles[i].time,value:v}).filter(Boolean));
+    proSeries.bbL.setData(bbL.map((v,i)=> v==null?null:{time:candles[i].time,value:v}).filter(Boolean));
+    proSeries.bbU.applyOptions({visible:showBB}); proSeries.bbL.applyOptions({visible:showBB});
+
+    // RSI
+    const r=rsi(closes,14);
+    rsiSeries.line.setData(r.map((v,i)=> v==null?null:{time:candles[i].time,value:v}).filter(Boolean));
+    const guide = lvl => r.map((_,i)=>({time:candles[i].time,value:lvl}));
+    rsiSeries.h30.setData(guide(30)); rsiSeries.h70.setData(guide(70));
+    rsiSeries.line.applyOptions({visible:showRSI}); rsiSeries.h30.applyOptions({visible:showRSI}); rsiSeries.h70.applyOptions({visible:showRSI});
+
+    // MACD
+    const m=macd(closes,12,26,9);
+    macdSeries.macd.setData(m.macdLine.map((v,i)=> v==null?null:{time:candles[i].time,value:v}).filter(Boolean));
+    macdSeries.sig.setData (m.sigLine .map((v,i)=> v==null?null:{time:candles[i].time,value:v}).filter(Boolean));
+    macdSeries.hist.setData(m.hist     .map((v,i)=> v==null?null:{time:candles[i].time,value:v,color:v>=0?'#22c55e':'#ef4444'}).filter(Boolean));
+    macdSeries.macd.applyOptions({visible:showMACD});
+    macdSeries.sig.applyOptions ({visible:showMACD});
+    macdSeries.hist.applyOptions({visible:showMACD});
+
+    // Pivots (Classic)
+    if(showPIV){
+      const recent=candles.slice(-288);
+      if(recent.length){
+        const H=Math.max(...recent.map(c=>c.high)); const L=Math.min(...recent.map(c=>c.low)); const C=recent[recent.length-1].close;
+        const P=(H+L+C)/3, R1=2*P-L, S1=2*P-H, R2=P+(H-L), S2=P-(H-L);
+        [[P,'#7dd3fc'],[R1,'#16a34a'],[S1,'#dc2626'],[R2,'#22c55e'],[S2,'#ef4444']].forEach(([lvl,col])=>{
+          const s=proChart.addLineSeries({color:col,lineWidth:1,lineStyle:LightweightCharts.LineStyle.Dotted});
+          s.setData(candles.map(c=>({time:c.time,value:lvl})));
+        });
+      }
+    }
+  }catch(e){
+    pc.innerHTML='<div style="padding:18px;color:#eaa">Error loading data (rate limit / network). Try again.</div>';
+    console.error(e);
+  }
+}
+
+// buttons
+document.getElementById('applyHome').onclick = ()=>{
+  ls.set('jk.pair', document.getElementById('homePair').value);
+  ls.set('jk.tf',   document.getElementById('homeTf').value);
+  proLoad(document.getElementById('homePair').value, document.getElementById('homeTf').value);
+};
+document.getElementById('applyStrats').onclick = ()=>{
+  ls.set('jk.stratA', document.getElementById('stratA').value);
+  ls.set('jk.stratB', document.getElementById('stratB').value);
+  proLoad(document.getElementById('homePair').value, document.getElementById('homeTf').value);
+};
+document.getElementById('resetStrats').onclick = ()=>{
+  ['jk.indEMA','jk.indBB','jk.indRSI','jk.indPIV','jk.indMACD'].forEach(k=>localStorage.removeItem(k));
+  location.reload();
+};
+
+// initial render
+proLoad(document.getElementById('homePair').value, document.getElementById('homeTf').value);
+</script>
+</body>
+</html>
